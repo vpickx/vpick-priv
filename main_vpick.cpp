@@ -1012,7 +1012,6 @@ bool restore_system_properties(const string &work_dir) {
         if (pos != string::npos) {
             string key = line.substr(0, pos);
             string value = line.substr(pos + 1);
-
             for (const auto &prop : properties_to_restore) {
                 if (key == prop) {
                     if (!restore_property(key, value)) {
@@ -1226,7 +1225,6 @@ std::string normalize_brand(const std::string &brand) {
     return brand; // Default: return as-is
 }
 
-//mc.meng
 GPUInfo generate_gpu_info(const std::string &brand, const std::string &model) {
     if (dbg) cout << "generate_gpu_info(" << brand << "," << model << ")" << endl;
     std::map<std::string, std::map<std::string, GPUInfo>> gpu_database = {
@@ -1340,63 +1338,79 @@ int calculate_checkdigit(const std::string& imei) {
 }
 
 std::string get_imei_prefix(const std::string& manufacturer) {
-    std::string manufacturer_lower = manufacturer;
-    std::transform(manufacturer_lower.begin(), manufacturer_lower.end(), manufacturer_lower.begin(), ::tolower);
-    static const std::unordered_map<std::string, std::string> manufacturer_prefixes = {
-        {"xiaomi", "86068"},       // 小米
-        {"samsung", "35561"},      // 三星
-        {"huawei", "86010"},       // 华为
-        {"oppo", "86021"},         // OPPO
-        {"vivo", "86080"},         // vivo
-        {"oneplus", "35999"},      // OnePlus
-        {"sony", "35999"},         // 索尼
-        {"nokia", "86010"},        // 诺基亚
-        {"lenovo", "86039"},       // 联想
-        {"asus", "35999"},         // 华硕
-        {"realme", "86086"},       // Realme
-        {"google", "35812"},       // Google
+    // 使用映射表存储品牌与其 TAC 前缀
+    static const std::map<std::string, std::vector<std::string>> imei_prefix_map = {
+        {"Xiaomi", {"865742", "867109", "869843", "868365", "868101", "863456", "862233", "864567", "861234"}},
+        {"HUAWEI", {"867612", "868757", "865432", "861122", "863344"}},
+        {"HONNOR", {"867812", "866700", "862272", "862862", "863322", "864455"}},
+        {"OPPO", {"861021", "863456", "867788", "869911", "862233"}},
+        {"vivo", {"860111", "865166", "863344", "867788", "868899"}},
+        {"Samsung", {"350000", "351123", "352233", "354455", "356677"}},
+        {"OnePlus", {"864157", "866174", "868899", "867766", "865544"}},
+        {"Lenovo", {"862822", "863789", "864455", "866677", "868899"}},
+        {"ZTE", {"861456", "862341", "863344", "865566", "867788"}},
+        {"Sony", {"356789", "357456", "358899", "359911", "352233"}},
+        {"Motorola", {"352446", "353410", "354455", "355566", "357788"}},
+        {"Nokia", {"354869", "353543", "352233", "356677", "358899"}},
+        {"Google", {"353914", "354436", "355544", "356655", "357766"}},
+        {"Realme", {"867445", "864202", "865566", "866677", "868899"}},
+        {"ASUS", {"863344", "865566", "867788", "869911", "862233"}},
+        {"LG", {"351234", "352345", "353456", "354567", "355678"}},
+        {"HTC", {"356678", "357789", "358890", "359901", "352234"}},
+        {"Meizu", {"862234", "863345", "864456", "865567", "866678"}}
     };
 
-    auto it = manufacturer_prefixes.find(manufacturer_lower);
-    if (it != manufacturer_prefixes.end()) {
-        return it->second;
-    } else {
-        return "86068";
+    // 查找品牌对应的TAC
+    auto it = imei_prefix_map.find(manufacturer);
+    if (it != imei_prefix_map.end()) {
+        const auto& prefixes = it->second;
+        // 随机选择一个TAC
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<size_t> dis(0, prefixes.size() - 1);
+        return prefixes[dis(gen)];
     }
+
+    // 对未知品牌，从已有品牌中随机选择一个品牌并获取一个随机的TAC
+    if (dbg) cout << "unknown manufacturer: " << manufacturer << endl;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    auto rand_brand_it = std::next(imei_prefix_map.begin(), std::uniform_int_distribution<size_t>(0, imei_prefix_map.size() - 1)(gen));
+    const auto& prefixes = rand_brand_it->second;
+    std::uniform_int_distribution<size_t> dis(0, prefixes.size() - 1);
+    return prefixes[dis(gen)];
 }
 
 std::string generate_imei_with_checkdigit(const std::string& manufacturer, const std::string& imei = "") {
-    if (dbg) cout << "generate_imei(" << manufacturer << "," << imei << ")" << endl;
-    std::string imei_prefix = get_imei_prefix(manufacturer);
+    if (dbg) std::cout << "generate_imei_with_checkdigit(" << manufacturer << ", " << imei << ")" << std::endl;
 
-    std::string imei_number;
+    std::string imei_prefix;
 
-    if (imei.empty()) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> dis(0, 9);
-
-        imei_number = imei_prefix;
-        for (int i = 0; i < 13; i++) {
-            imei_number += std::to_string(dis(gen));
-        }
+    if (imei.empty() || imei.length() < 6) {
+        // 根据品牌获取TAC前缀
+        imei_prefix = get_imei_prefix(manufacturer);
     } else {
-        imei_number = imei.substr(0, 6);
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> dis(0, 9);
-        
-        for (int i = 6; i < 14; i++) {
-            imei_number += std::to_string(dis(gen));
-        }
+        imei_prefix = imei.substr(0, 6);
     }
 
-    int checkdigit = calculate_checkdigit(imei_number);
+    // 拼接随机部分（6位TAC + 7位随机数）
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis(0, 9);
+    std::string imei_number = imei_prefix;
 
+    while (imei_number.length() < 14) {
+        imei_number += std::to_string(dis(gen));
+    }
+
+    // 计算校验码
+    int checkdigit = calculate_checkdigit(imei_number);
     imei_number += std::to_string(checkdigit);
 
+    if (dbg) std::cout << "Generated IMEI: " << imei_number << std::endl;
     return imei_number;
 }
+
 
 std::string generate_imsi(const std::string& operatorCode) {
     // 验证运营商代码的有效性，假设是三位数字，如460，46001等
@@ -2142,90 +2156,77 @@ void clear_conflict_properties() {
     }
 }
 
-bool select_backup_and_restore(int index) {
+vector<string> get_all_backups() {
     DIR *dir = opendir(WORK_DIR);
     if (dir == nullptr) {
-        cerr << "Failed to open directory: " << WORK_DIR << endl;
-        return false;
+        if (dbg) cerr << "Failed to open directory: " << WORK_DIR << endl;
+        return {};
     }
 
     vector<string> backup_files;
     struct dirent *entry;
+    string file_name;
+
+    std::regex tar_gz_pattern(".*\\.tar\\.gz$");
+
     while ((entry = readdir(dir)) != nullptr) {
-        string file_name = entry->d_name;
-        if (file_name.find(".tar.gz") != string::npos) {
+        file_name = entry->d_name;
+
+        if (file_name == "." || file_name == "..") {
+            continue;
+        }
+
+        if (std::regex_match(file_name, tar_gz_pattern)) {
             backup_files.push_back(file_name);
         }
     }
     closedir(dir);
 
+    if (dbg) cerr << "Total backup files found: " << backup_files.size() << endl;
+    
+    return backup_files;
+}
+
+string select_backup_by_index(int index) {
+    if (dbg) cout << "select_backup_by_index(" << index << ")" << endl;
+    if (index <= 0) {
+        cerr << "Invalid backup index: " << index << endl;
+        return "";
+    }
+    vector<string> backup_files = get_all_backups();
+    // 检查备份列表是否为空
     if (backup_files.empty()) {
         cerr << "No backup files found in " << WORK_DIR << endl;
-        return false;
+        return "";
     }
 
-    // Check if the index is valid
+    // 检查索引是否有效
     if (index < 1 || index > backup_files.size()) {
-        cerr << "Invalid backup index" << endl;
-        return false;
+        cerr << "Invalid backup index: " << index << " (Valid range: 1-" 
+             << backup_files.size() << ")" << endl;
+        return "";
     }
 
-    // Adjust to 0-based index
+    // 调整为 0-based 索引
     int adjusted_index = index - 1;
     string selected_backup = backup_files[adjusted_index];
+
+    // 调试日志
+    if (dbg) {
+        if (dbg) cout << "Selected backup (index " << index << " of " 
+             << backup_files.size() << "): " << selected_backup << endl;
+    }
     if (dbg) cout << "Selected backup: " << selected_backup << endl;
-
-    // Prepare destination directory
-    string destination_dir = "/data/local/tmp/.vpk/";
-
-    // Check if the destination directory exists, and create it if not
-    struct stat st = {0};
-    if (stat(destination_dir.c_str(), &st) == -1) {
-        if (dbg) cout << "Directory " << destination_dir << " does not exist. Creating it." << endl;
-        if (mkdir(destination_dir.c_str(), 0777) != 0) {
-            cerr << "Failed to create directory: " << destination_dir << endl;
-            return false;
-        }
-    }
-
-    // Extract the selected tar.gz file
-    string tar_file = WORK_DIR + selected_backup;
-    if (!extract_tar(tar_file, destination_dir)) {
-        cerr << "Failed to extract tar file: " << tar_file << endl;
-        return false;
-    }
-
-    string work_dir = destination_dir + selected_backup.substr(0, selected_backup.find(".tar.gz"));
-    
-    restore_system_properties(work_dir);
-    clear_conflict_properties();
-    restore_pm_list_features(work_dir);
-    restore_gpu_info(work_dir);
-    if (!keepcache) delete_directory(work_dir);
-    return true;
+    return selected_backup;
 }
 
 
-bool select_backup_and_restore(const string &brand, const string &model) {
-    DIR *dir = opendir(WORK_DIR);
-    if (dir == nullptr) {
-        cerr << "Failed to open directory: " << WORK_DIR << endl;
-        return false;
-    }
-
-    vector<string> backup_files;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        string file_name = entry->d_name;
-        if (file_name.find(".tar.gz") != string::npos) {
-            backup_files.push_back(file_name);
-        }
-    }
-    closedir(dir);
-
+string select_backup_by_brand(const string &brand, const string &model) {
+    if (dbg) cout << "select_backup_by_brand(" << brand << "," << model << ")" << endl;
+    vector<string> backup_files = get_all_backups();
     if (backup_files.empty()) {
         cerr << "No backup files found in " << WORK_DIR << endl;
-        return false;
+        return "";
     }
 
     // 匹配格式：厂商=品牌=型号=版本=构建ID=是否加密.tar.gz
@@ -2253,10 +2254,9 @@ bool select_backup_and_restore(const string &brand, const string &model) {
 
     if (matching_files.empty()) {
         cerr << "No matching backup files found for brand: " << brand << ", model: " << model << endl;
-        return false;
+        return "";
     }
 
-    // Randomly select one if multiple matches exist
     string selected_backup;
     if (matching_files.size() == 1) {
         selected_backup = matching_files[0];
@@ -2268,7 +2268,10 @@ bool select_backup_and_restore(const string &brand, const string &model) {
     }
 
     if (dbg) cout << "Selected backup: " << selected_backup << endl;
+    return selected_backup;
+}
 
+string extract_backup_file(string selected_backup) {
     // Prepare destination directory
     string destination_dir = "/data/local/tmp/.vpk/";
 
@@ -2277,7 +2280,7 @@ bool select_backup_and_restore(const string &brand, const string &model) {
         if (dbg) cout << "Directory " << destination_dir << " does not exist. Creating it." << endl;
         if (mkdir(destination_dir.c_str(), 0777) != 0) {
             cerr << "Failed to create directory: " << destination_dir << endl;
-            return false;
+            return "";
         }
     }
 
@@ -2285,10 +2288,32 @@ bool select_backup_and_restore(const string &brand, const string &model) {
     string tar_file = WORK_DIR + selected_backup;
     if (!extract_tar(tar_file, destination_dir)) {
         cerr << "Failed to extract tar file: " << tar_file << endl;
-        return false;
+        return "";
     }
 
     string work_dir = destination_dir + selected_backup.substr(0, selected_backup.find(".tar.gz"));
+    return work_dir;
+}
+
+int restore_main() {
+    auto start_time = std::chrono::high_resolution_clock::now();
+    string selected_backup = "";
+    if (gOpstions.withIndex) {
+        string selected_backup = select_backup_by_index(gOpstions.index);
+    } else if (gOpstions.withBrand && gOpstions.withModel) {
+        string selected_backup = select_backup_by_brand(gOpstions.brand, gOpstions.model);
+    } else {
+        cerr << "No valid criteria provided for restore" << endl;
+        return -1;
+    }
+
+    if (selected_backup.empty()) {
+        return -1;
+    }
+    string work_dir = extract_backup_file(selected_backup);
+    if (work_dir.empty()) {
+        return -1;
+    }
 
     restore_system_properties(work_dir);
     clear_conflict_properties();
@@ -2296,33 +2321,6 @@ bool select_backup_and_restore(const string &brand, const string &model) {
     restore_gpu_info(work_dir);
 
     if (!keepcache) delete_directory(work_dir);
-    return true;
-}
-
-void restore_main() {
-    auto start_time = std::chrono::high_resolution_clock::now();
-    if (gOpstions.withIndex) {
-        if (dbg) cout << "Restoring backup with index: " << gOpstions.index << endl;
-        if (gOpstions.index <= 0) {
-            cerr << "Invalid backup index" << endl;
-            return;
-        }
-
-        if (!select_backup_and_restore(gOpstions.index)) {
-            cerr << "Failed to restore the selected backup" << endl;
-            return;
-        }
-    } else if (gOpstions.withBrand && gOpstions.withModel) {
-        if (dbg) cout << "Restoring backup with brand: " << gOpstions.brand << ", model: " << gOpstions.model << endl;
-
-        if (!select_backup_and_restore(gOpstions.brand, gOpstions.model)) {
-            cerr << "Failed to restore the selected backup based on brand and model" << endl;
-            return;
-        }
-    } else {
-        cerr << "No valid criteria provided for restore" << endl;
-        return;
-    }
 
     generate_boot_id();
     generate_device_info();
@@ -2330,10 +2328,12 @@ void restore_main() {
     generate_wifi_info();
     generate_bluetooth_info();
     generate_misc_info();
+
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     if (dbg) std::cout << "execution time: " << duration.count()/1000.0 << "s" << std::endl;
     cout << "Success" << endl;
+    return 0;
 }
 
 int show_file(const string &work_dir, const string &filename) {
@@ -2355,87 +2355,17 @@ int show_file(const string &work_dir, const string &filename) {
     return 0;
 }
 
-string select_backup_by_index(int index) {
-    DIR *dir = opendir(WORK_DIR);
-    if (dir == nullptr) {
-        cerr << "Failed to open directory: " << WORK_DIR << endl;
-        return "";
-    }
-
-    vector<string> backup_files;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        string file_name = entry->d_name;
-        if (file_name.find(".tar.gz") != string::npos) {
-            backup_files.push_back(file_name);
-        }
-    }
-    closedir(dir);
-
-    // Sort the backup files to ensure consistent order
-    sort(backup_files.begin(), backup_files.end());
-
-    if (backup_files.empty()) {
-        cerr << "No backup files found in " << WORK_DIR << endl;
-        return "";
-    }
-
-    // Check if the index is valid
-    if (index < 1 || index > backup_files.size()) {
-        cerr << "Invalid backup index: " << index << endl;
-        return "";
-    }
-
-    // Adjust to 0-based index
-    int adjusted_index = index - 1;
-    string selected_backup = backup_files[adjusted_index];
-    if (dbg) cout << "Selected backup: " << selected_backup << endl;
-
-    // Prepare destination directory
-    string destination_dir = string(WORK_DIR) + ".vpk/";
-    struct stat st = {0};
-    if (stat(destination_dir.c_str(), &st) == -1) {
-        if (errno == ENOENT) {
-            if (dbg) cout << "Directory " << destination_dir << " does not exist. Creating it." << endl;
-            if (mkdir(destination_dir.c_str(), 0777) != 0) {
-                cerr << "Failed to create directory: " << destination_dir 
-                     << ", errno: " << strerror(errno) << endl;
-                return "";
-            }
-        } else {
-            cerr << "Failed to check directory: " << destination_dir 
-                 << ", errno: " << strerror(errno) << endl;
-            return "";
-        }
-    }
-
-    // Extract the selected tar.gz file
-    string tar_file = WORK_DIR + selected_backup;
-    if (!extract_tar(tar_file, destination_dir)) {
-        cerr << "Failed to extract tar file: " << tar_file << endl;
-        return "";
-    }
-
-    // Generate work directory name
-    size_t pos = selected_backup.find(".tar.gz");
-    if (pos == string::npos) {
-        cerr << "Invalid backup file name: " << selected_backup << endl;
-        return "";
-    }
-    string work_dir = destination_dir + selected_backup.substr(0, pos);
-
-    if (dbg) cout << "Work directory: " << work_dir << endl;
-    return work_dir;
-}
-
-
 int show_main() {
-    string work_dir = select_backup_by_index(gOpstions.index);
-    if (work_dir.empty()) {
+    string selected_backup = select_backup_by_index(gOpstions.index);
+    if (selected_backup.empty()) {
         cerr << "Failed to select by index: " << gOpstions.index << endl;
         return -1;
     }
-    int ret = 0;
+    string work_dir = extract_backup_file(selected_backup);
+    if (work_dir.empty()) {
+        return -1;
+    }
+
     if (gOpstions.propOnly) {
         show_file(work_dir, "prop.pick");
         if (!keepcache) delete_directory(work_dir);
@@ -2450,7 +2380,7 @@ int show_main() {
     show_file(work_dir, "prop.pick");
     show_file(work_dir, "pm_list_features");
     if (!keepcache) delete_directory(work_dir);
-    return ret;
+    return 0;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -2460,12 +2390,14 @@ int dump_main() {
     string model = execute_command("getprop ro.product.model");
     string version = execute_command("getprop ro.build.version.release");
     string build_id = execute_command("getprop ro.build.id");
+    string imei = execute_command("getprop persist.sim.imei");
     cout << "********************************************************************************" <<  endl;
+    cout << "build_id    : " << build_id;
+    cout << "version     : Android " << version;
     cout << "manufacturer: " << manufacturer;
     cout << "brand       : " << brand;
-    cout << "model       : " << model;
-    cout << "version     : Android " << version;
-    cout << "build_id    : " << build_id;
+    cout << "model       : " << model;  
+    if (!imei.empty()) cout << "imei        : " << imei;
     cout << "********************************************************************************" <<  endl;
     return 0;
 }
@@ -2622,13 +2554,13 @@ void handle_command(const string& cmd, int argc, char* argv[]) {
         process_options(argc, argv, i);
         encrypt_main();
     } else if (cmd == "-s" || cmd == "show") {
-        if (argc < 3) {
-            print_help();
-            return;
-        }
-        gOpstions.withIndex = true;
-        gOpstions.index = atoi(argv[2]);
-        int i = 3;
+        // if (argc < 3) {
+        //     print_help();
+        //     return;
+        // }
+        // gOpstions.withIndex = true;
+        // gOpstions.index = atoi(argv[2]);
+        int i = 2;
         process_options(argc, argv, i);
         show_main();
     }  else if (cmd == "dump") {
