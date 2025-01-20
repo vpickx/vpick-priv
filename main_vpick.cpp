@@ -66,10 +66,14 @@ struct OpstionsType {
     //for restore
     bool withIndex;
     int index;
+    bool withManufacturer;
+    string manufacturer;
     bool withBrand;
     string brand;
     bool withModel;
     string model;
+    bool withVersion;
+    string version;
     //for show
     bool propOnly;
     bool featureOnly;
@@ -89,10 +93,14 @@ OpstionsType gOpstions = {
     //for restore
     .withIndex = false,
     .index = -1,
+    .withManufacturer = false,
+    .manufacturer = "",
     .withBrand = false,
     .brand = "",
     .withModel = false,
     .model = "",
+    .withVersion = false,
+    .version = "",
     //for show
     .propOnly = false,
     .featureOnly = false,
@@ -711,74 +719,6 @@ void backup_main() {
     if (!keepcache) delete_directory(work_dir);
     cout << "Success" << endl;
 }
-
-///list
-void list_main() {
-    string directory = WORK_DIR;
-    
-    DIR *dir = opendir(directory.c_str());
-    if (dir == nullptr) {
-        cerr << "Failed to open directory: " << directory << endl;
-        return;
-    }
-
-    struct dirent *entry;
-    vector<string> backup_files;
-
-    // 遍历目录，寻找所有的 .tar.gz 文件
-    while ((entry = readdir(dir)) != nullptr) {
-        string file_name = entry->d_name;
-
-        // 只处理 .tar.gz 文件
-        if (file_name.find(".tar.gz") != string::npos) {
-            backup_files.push_back(file_name);
-        }
-    }
-
-    closedir(dir);
-
-    // 如果没有找到备份文件，给出提示
-    if (backup_files.empty()) {
-        if (dbg) cout << "No backup files found in " << directory << endl;
-        return;
-    }
-
-    // 匹配格式：厂商=品牌=型号=版本=构建ID=是否加密.tar.gz
-    regex device_regex(R"(([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)\.tar\.gz)");
-    smatch match;
-
-    // 输出标题
-    cout << "-------------------------------------------------------------------------------------------------" << endl;
-    cout << "index | manufacturer    | brand           | model           | Version | Build ID           | flag" << endl;
-    cout << "-------------------------------------------------------------------------------------------------" << endl;
-
-    // 打印每个备份文件的信息
-    for (size_t i = 0; i < backup_files.size(); ++i) {
-        string file_name = backup_files[i];
-
-        if (regex_search(file_name, match, device_regex)) {
-            string manufacturer = match[1];  // 厂商
-            string brand = match[2];         // 品牌
-            string model = match[3];         // 型号
-            string version = match[4];       // 版本
-            string build_id = match[5];      // 构建 ID
-            string enc = match[6];           // enc
-
-            if ((gOpstions.withBrand == true) && (gOpstions.brand != brand)) {
-                continue;
-            }
-            if ((gOpstions.withModel == true) && (gOpstions.model != model)) {
-                continue;
-            }
-            // 输出信息，左对齐
-            printf("%-5zu | %-15s | %-15s | %-15s | %-7s | %-18s | %-4s\n", i + 1, manufacturer.c_str(), brand.c_str(), model.c_str(), version.c_str(), build_id.c_str(), enc.c_str());
-        } else {
-            cerr << "Failed to parse backup file name: " << file_name << endl;
-        }
-    }
-    cout << "-------------------------------------------------------------------------------------------------" << endl;
-}
-
 
 char random_lowercase() {
     return 'a' + rand() % 26;
@@ -2182,50 +2122,15 @@ vector<string> get_all_backups() {
     }
     closedir(dir);
 
-    if (dbg) cerr << "Total backup files found: " << backup_files.size() << endl;
+    if (dbg) cout << "Total backup files found: " << backup_files.size() << endl;
     
     return backup_files;
 }
 
-string select_backup_by_index(int index) {
-    if (dbg) cout << "select_backup_by_index(" << index << ")" << endl;
-    if (index <= 0) {
-        cerr << "Invalid backup index: " << index << endl;
-        return "";
-    }
-    vector<string> backup_files = get_all_backups();
-    // 检查备份列表是否为空
-    if (backup_files.empty()) {
-        cerr << "No backup files found in " << WORK_DIR << endl;
-        return "";
-    }
-
-    // 检查索引是否有效
-    if (index < 1 || index > backup_files.size()) {
-        cerr << "Invalid backup index: " << index << " (Valid range: 1-" 
-             << backup_files.size() << ")" << endl;
-        return "";
-    }
-
-    // 调整为 0-based 索引
-    int adjusted_index = index - 1;
-    string selected_backup = backup_files[adjusted_index];
-
-    // 调试日志
-    if (dbg) {
-        if (dbg) cout << "Selected backup (index " << index << " of " 
-             << backup_files.size() << "): " << selected_backup << endl;
-    }
-    if (dbg) cout << "Selected backup: " << selected_backup << endl;
-    return selected_backup;
-}
-
-
-string select_backup_by_brand(const string &brand, const string &model) {
-    if (dbg) cout << "select_backup_by_brand(" << brand << "," << model << ")" << endl;
+string setlect_one_backup_file() {
     vector<string> backup_files = get_all_backups();
     if (backup_files.empty()) {
-        cerr << "No backup files found in " << WORK_DIR << endl;
+        cerr << "Failed: No backup files found in " << WORK_DIR << endl;
         return "";
     }
 
@@ -2237,23 +2142,41 @@ string select_backup_by_brand(const string &brand, const string &model) {
         string file_name = backup_files[i];
 
         if (regex_search(file_name, match, device_regex)) {
-            string t_manufacturer = match[1];  // 厂商
-            string t_brand = match[2];         // 品牌
-            string t_model = match[3];         // 型号
-            string t_version = match[4];       // 版本
-            string t_build_id = match[5];      // 构建 ID
-            string t_enc = match[6];           // enc
+            string manufacturer = match[1];  // 厂商
+            string brand = match[2];         // 品牌
+            string model = match[3];         // 型号
+            string version = match[4];       // 版本
+            string build_id = match[5];      // 构建 ID
+            string enc = match[6];           // enc
 
-            if (t_brand == brand && t_model == model)  {
-                matching_files.push_back(file_name);
+            if ((gOpstions.withIndex) && (gOpstions.index == (i + 1))) {
+                return file_name;
             }
+            if ((gOpstions.withManufacturer == true) && (gOpstions.manufacturer != manufacturer)) {
+                continue;
+            }
+            if ((gOpstions.withBrand == true) && (gOpstions.brand != brand)) {
+                continue;
+            }
+            if ((gOpstions.withModel == true) && (gOpstions.model != model)) {
+                continue;
+            }
+            if ((gOpstions.withVersion == true) && (gOpstions.version != version)) {
+                continue;
+            }
+            matching_files.push_back(file_name);
         } else {
             cerr << "Failed to parse backup file name: " << file_name << endl;
         }
     }
 
     if (matching_files.empty()) {
-        cerr << "No matching backup files found for brand: " << brand << ", model: " << model << endl;
+        cerr << "Failed: No matching backup files found for conditions: " << endl;
+        if (gOpstions.withIndex == true)        cerr << "    index:      : " << gOpstions.index << endl;
+        if (gOpstions.withManufacturer == true) cerr << "    manufacturer: " << gOpstions.manufacturer << endl;
+        if (gOpstions.withBrand == true)        cerr << "    brand       : " << gOpstions.brand << endl;
+        if (gOpstions.withModel == true)        cerr << "    model       : " << gOpstions.model << endl;
+        if (gOpstions.withVersion == true)      cerr << "    version     : " << gOpstions.version << endl;
         return "";
     }
 
@@ -2295,18 +2218,32 @@ string extract_backup_file(string selected_backup) {
     return work_dir;
 }
 
+/////////////////////////////////////////////////////////////////////
+///dump
+int dump_main() {
+    string manufacturer = execute_command("getprop ro.product.manufacturer");
+    string brand = execute_command("getprop ro.product.brand");
+    string model = execute_command("getprop ro.product.model");
+    string version = execute_command("getprop ro.build.version.release");
+    string build_id = execute_command("getprop ro.build.id");
+    string imei = execute_command("getprop persist.sim.imei");
+    cout << "********************************************************************************" <<  endl;
+    cout << "build_id    : " << build_id;
+    cout << "version     : Android " << version;
+    cout << "manufacturer: " << manufacturer;
+    cout << "brand       : " << brand;
+    cout << "model       : " << model;
+    if (!imei.empty()) cout << "imei        : " << imei;
+    cout << "********************************************************************************" <<  endl;
+    return 0;
+}
+
+/////////////////////////////////////////////////////////////////////
+///restore
 int restore_main() {
     auto start_time = std::chrono::high_resolution_clock::now();
-    string selected_backup = "";
-    if (gOpstions.withIndex) {
-        string selected_backup = select_backup_by_index(gOpstions.index);
-    } else if (gOpstions.withBrand && gOpstions.withModel) {
-        string selected_backup = select_backup_by_brand(gOpstions.brand, gOpstions.model);
-    } else {
-        cerr << "No valid criteria provided for restore" << endl;
-        return -1;
-    }
 
+    string selected_backup = setlect_one_backup_file();
     if (selected_backup.empty()) {
         return -1;
     }
@@ -2333,9 +2270,59 @@ int restore_main() {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     if (dbg) std::cout << "execution time: " << duration.count()/1000.0 << "s" << std::endl;
     cout << "Success" << endl;
+    dump_main();
     return 0;
 }
 
+/////////////////////////////////////////////////////////////////////
+///list
+void list_main() {
+    vector<string> backup_files = get_all_backups();
+
+    // 匹配格式：厂商=品牌=型号=版本=构建ID=是否加密.tar.gz
+    regex device_regex(R"(([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)=([^=]+)\.tar\.gz)");
+    smatch match;
+
+    // 输出标题
+    cout << "-------------------------------------------------------------------------------------------------" << endl;
+    cout << "index | manufacturer    | brand           | model           | Version | Build ID           | flag" << endl;
+    cout << "-------------------------------------------------------------------------------------------------" << endl;
+
+    // 打印每个备份文件的信息
+    for (size_t i = 0; i < backup_files.size(); ++i) {
+        string file_name = backup_files[i];
+
+        if (regex_search(file_name, match, device_regex)) {
+            string manufacturer = match[1];  // 厂商
+            string brand = match[2];         // 品牌
+            string model = match[3];         // 型号
+            string version = match[4];       // 版本
+            string build_id = match[5];      // 构建 ID
+            string enc = match[6];           // enc
+
+            if ((gOpstions.withManufacturer == true) && (gOpstions.manufacturer != manufacturer)) {
+                continue;
+            }
+            if ((gOpstions.withBrand == true) && (gOpstions.brand != brand)) {
+                continue;
+            }
+            if ((gOpstions.withModel == true) && (gOpstions.model != model)) {
+                continue;
+            }
+            if ((gOpstions.withVersion == true) && (gOpstions.version != version)) {
+                continue;
+            }
+            // 输出信息，左对齐
+            printf("%-5zu | %-15s | %-15s | %-15s | %-7s | %-18s | %-4s\n", i + 1, manufacturer.c_str(), brand.c_str(), model.c_str(), version.c_str(), build_id.c_str(), enc.c_str());
+        } else {
+            cerr << "Failed to parse backup file name: " << file_name << endl;
+        }
+    }
+    cout << "-------------------------------------------------------------------------------------------------" << endl;
+}
+
+/////////////////////////////////////////////////////////////////////
+///show
 int show_file(const string &work_dir, const string &filename) {
     ifstream prop_file(work_dir + "/" + filename);
     if (!prop_file.is_open()) {
@@ -2356,7 +2343,7 @@ int show_file(const string &work_dir, const string &filename) {
 }
 
 int show_main() {
-    string selected_backup = select_backup_by_index(gOpstions.index);
+    string selected_backup = setlect_one_backup_file();
     if (selected_backup.empty()) {
         cerr << "Failed to select by index: " << gOpstions.index << endl;
         return -1;
@@ -2383,24 +2370,6 @@ int show_main() {
     return 0;
 }
 
-/////////////////////////////////////////////////////////////////////
-int dump_main() {
-    string manufacturer = execute_command("getprop ro.product.manufacturer");
-    string brand = execute_command("getprop ro.product.brand");
-    string model = execute_command("getprop ro.product.model");
-    string version = execute_command("getprop ro.build.version.release");
-    string build_id = execute_command("getprop ro.build.id");
-    string imei = execute_command("getprop persist.sim.imei");
-    cout << "********************************************************************************" <<  endl;
-    cout << "build_id    : " << build_id;
-    cout << "version     : Android " << version;
-    cout << "manufacturer: " << manufacturer;
-    cout << "brand       : " << brand;
-    cout << "model       : " << model;  
-    if (!imei.empty()) cout << "imei        : " << imei;
-    cout << "********************************************************************************" <<  endl;
-    return 0;
-}
 
 /////////////////////////////////////////////////////////////////////
 int encrypt_main() {
@@ -2420,43 +2389,63 @@ int encrypt_main() {
 
 /////////////////////////////////////////////////////////////////////
 void print_help() {
-    cout << "Usage: vpick <command> [options]\n";
-    cout << "\nCommands:" << endl;
-    cout << "  -v, --version         Show version information." << endl;
-    cout << "  -b, backup            Create a backup." << endl;
-    cout << "  -l, list              List available backups." << endl;
-    cout << "  dump                  Dump current device info." << endl;
-    if (dbg) cout << "  -r, restore           Restore from a backup." << endl;
-    if (dbg) cout << "  -e, encrypt           Encrypt a file." << endl;
-    if (dbg) cout << "  -d, decrypt           Decrypt a file." << endl;
-    if (dbg) cout << "  -s, show              Show details of a backup." << endl;
-    if (dbg) cout << "  getprop               Retrieve system properties." << endl;
-    if (dbg) cout << "  -h, help              Show this help message." << endl;
+    cout << "Usage: vpick <command> [options]\n\n";
 
-    if (dbg) cout << "\nOptions:" << endl;
-    if (dbg) cout << "  --index <index>       Specify the target backup index (1-based)." << endl;
-    if (dbg) cout << "  --brand <brand>       Specify the target device brand." << endl;
-    if (dbg) cout << "  --model <model>       Specify the target device model." << endl;
-    if (dbg) cout << "  --prop-only           Only restore system properties." << endl;
-    if (dbg) cout << "  --feature-only        Only restore system features." << endl;
-    if (dbg) cout << "  --key <key>           Specify the encryption/decryption key." << endl;
-    if (dbg) cout << "  -i, --input <file>    Specify the input file for encryption/decryption." << endl;
-    if (dbg) cout << "  -o, --output <file>   Specify the output file for encryption/decryption." << endl;
-    if (dbg) cout << "  --dbg, --debug        Enable debug mode to show detailed logs." << endl;
-    if (dbg) cout << "  --kc, --keepcache     Keep cache files after restore." << endl;
-    if (dbg) cout << "  --setprop-cmd <setprop-cmd>     indicate how to setprop" << endl;
-    
+    // Commands
+    cout << "Commands:\n";
+    cout << "  -v, --version           Display version information.\n";
+    cout << "  -b, backup              Create a backup.\n";
+    cout << "  -l, list                List available backups.\n";
+    cout << "  dump                    Display current device information.\n";
+    cout << "  -r, restore             Restore a backup.\n";
+    if (dbg) {
+        cout << "  -e, encrypt             Encrypt a specified file.\n";
+        cout << "  -d, decrypt             Decrypt a specified file.\n";
+        cout << "  -s, show                Display detailed information about a backup.\n";
+        cout << "  getprop                 Get current system properties.\n";
+        cout << "  -h, help                Show this help message.\n";
+    }
 
-    cout << "\nExamples:" << endl;
-    cout << "  vpick -v" << endl;
-    cout << "  vpick backup" << endl;
-    cout << "  vpick list" << endl;
-    cout << "  vpick dump" << endl;
-    if (dbg) cout << "  vpick restore --index 1 --brand Xiaomi --model Redmi" << endl;
-    if (dbg) cout << "  vpick -r --dbg" << endl;
-    if (dbg) cout << "  vpick encrypt -i file.txt -o file.txt.enc --key mykey" << endl;
-    if (dbg) cout << "  vpick decrypt -i file.txt.enc -o file.txt --key mykey" << endl;
+    // Options
+    cout << "\nOptions:\n";
+    cout << "  --index <index>         Specify the target backup index (starting from 1).\n";
+    cout << "  --man, --manufacturer <manufacturer>  Specify the device manufacturer.\n";
+    cout << "  --bra, --brand <brand>                Specify the device brand.\n";
+    cout << "  --mode, --model <model>               Specify the device model.\n";
+    cout << "  --ver, --version <version>            Specify the device version.\n";
+    if (dbg) {
+        cout << "  --prop-only                            Restore only system properties.\n";
+        cout << "  --feature-only                         Restore only system features.\n";
+        cout << "  --key <key>                            Specify the encryption or decryption key.\n";
+        cout << "  --in, --input <file>                   Specify the input file for encryption or decryption.\n";
+        cout << "  --out, --output <file>                 Specify the output file for encryption or decryption.\n";
+        cout << "  --dbg, --debug                         Enable debug mode to display detailed logs.\n";
+        cout << "  --kc, --keepcache                      Preserve cache files after restoration.\n";
+        cout << "  --setprop-cmd <setprop-cmd>            Specify the command for setting properties.\n";
+    }
+
+    // Examples
+    cout << "\nExamples:\n";
+    cout << "  vpick -v\n";
+    cout << "  vpick dump\n";
+    cout << "  vpick backup\n";
+    cout << "  vpick list\n";
+    cout << "  vpick list --man Google               # Show all backups for manufacturer 'Google'.\n";
+    cout << "  vpick list --brand Xiaomi             # Show all backups for brand 'Xiaomi'.\n";
+    cout << "  vpick list --ver 13                   # Show all backups for Android version 13.\n";
+    cout << "  vpick -r                              # Randomly restore a backup.\n";
+    cout << "  vpick -r --index 1                    # Restore the first backup.\n";
+    cout << "  vpick -r --man Google                 # Restore a backup for manufacturer 'Google'.\n";
+    cout << "  vpick -r --brand Xiaomi               # Restore a backup for brand 'Xiaomi'.\n";
+    cout << "  vpick -r --brand Xiaomi --model Redmi # Restore a backup for brand 'Xiaomi' and model 'Redmi'.\n";
+    cout << "  vpick -r --ver 13                     # Restore a backup for Android version 13.\n";
+    if (dbg) {
+        cout << "  vpick -r --dbg                        # Restore a backup in debug mode.\n";
+        cout << "  vpick encrypt --in file.txt --out file.txt.enc --key mykey\n";
+        cout << "  vpick decrypt --in file.txt.enc --out file.txt --key mykey\n";
+    }
 }
+
 
 
 void process_options(int argc, char* argv[], int& i) {
@@ -2467,7 +2456,7 @@ void process_options(int argc, char* argv[], int& i) {
             dbg = true;
         } else if (option == "--kc" || option == "--keepcache") {
             keepcache = true;
-        } else if (option == "-i" || option == "--input") {
+        } else if (option == "-in" || option == "--input") {
             gOpstions.withInput = true;
             gOpstions.input = argv[++i];
         } else if (option == "--index") {
@@ -2480,13 +2469,23 @@ void process_options(int argc, char* argv[], int& i) {
                 print_help();
                 exit(1);
             }
-        } else if (option == "-o" || option == "--output") {
+        } else if (option == "-out" || option == "--output") {
             gOpstions.withOutput = true;
             gOpstions.output = argv[++i];
         } else if (option == "--key") {
             gOpstions.withkey = true;
             gOpstions.key = argv[++i];
-        } else if (option == "-b" || option == "--brand") {
+        } else if (option == "--man" || option == "--manufacturer") {
+            if (i + 1 < argc) {
+                gOpstions.withManufacturer = true;
+                gOpstions.manufacturer = argv[++i];
+                if (dbg) cout << "Brand set to: " << gOpstions.manufacturer << endl;
+            } else {
+                cerr << "Error: --manufacturer requires a value." << endl;
+                print_help();
+                exit(1);
+            }
+        }  else if (option == "--bra" || option == "--brand") {
             if (i + 1 < argc) {
                 gOpstions.withBrand = true;
                 gOpstions.brand = argv[++i];
@@ -2496,13 +2495,23 @@ void process_options(int argc, char* argv[], int& i) {
                 print_help();
                 exit(1);
             }
-        } else if (option == "-m" || option == "--model") {
+        } else if (option == "--mod" || option == "--model") {
             if (i + 1 < argc) {
                 gOpstions.withModel = true;
                 gOpstions.model = argv[++i];
                 if (dbg) cout << "Model set to: " << gOpstions.model << endl;
             } else {
                 cerr << "Error: --model requires a value." << endl;
+                print_help();
+                exit(1);
+            }
+        } else if (option == "--ver" || option == "--version") {
+            if (i + 1 < argc) {
+                gOpstions.withVersion = true;
+                gOpstions.version = argv[++i];
+                if (dbg) cout << "Version set to: " << gOpstions.version << endl;
+            } else {
+                cerr << "Error: --version requires a value." << endl;
                 print_help();
                 exit(1);
             }
