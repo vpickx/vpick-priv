@@ -262,6 +262,24 @@ string md5sum(const string &str) {
     return ss.str();
 }
 
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_int_distribution<> lower_dist('a', 'z');
+std::uniform_int_distribution<> upper_dist('A', 'Z');
+std::uniform_int_distribution<> digit_dist('0', '9');
+
+char random_lowercase() {
+    return lower_dist(gen);
+}
+
+char random_uppercase() {
+    return upper_dist(gen);
+}
+
+char random_digit() {
+    return digit_dist(gen);
+}
+
 bool create_directory(const string &dir_path) {
     // Construct the mkdir -p command
     string command = "mkdir -p " + dir_path;
@@ -720,31 +738,28 @@ void backup_main() {
     cout << "Success" << endl;
 }
 
-char random_lowercase() {
-    return 'a' + rand() % 26;
-}
-
-char random_uppercase() {
-    return 'A' + rand() % 26;
-}
-
-char random_digit() {
-    return '0' + rand() % 10;
-}
 
 string generate_new_serialno(const string &value) {
-    string new_serialno = value;
-    
-    for (size_t i = 0; i < new_serialno.length(); ++i) {
-        if (islower(new_serialno[i])) {
-            new_serialno[i] = random_lowercase();
-        } else if (isupper(new_serialno[i])) {
-            new_serialno[i] = random_uppercase();
-        } else if (isdigit(new_serialno[i])) {
-            new_serialno[i] = random_digit();
-        }
+    if (dbg) cout << "generate_new_serialno(" << value << ")" << endl;
+    if (value.empty()) {
+        return "DEFAULT_SERIALNO";
     }
 
+    string new_serialno;
+    new_serialno.reserve(value.size());
+
+    for (char ch : value) {
+        if (islower(ch)) {
+            new_serialno += random_lowercase();
+        } else if (isupper(ch)) {
+            new_serialno += random_uppercase();
+        } else if (isdigit(ch)) {
+            new_serialno += random_digit();
+        } else {
+            new_serialno += random_digit();  // 非字母数字字符统一替换为随机数字
+        }
+    }
+    if (dbg) cout << "new_serialno:" << new_serialno << endl;
     return new_serialno;
 }
 
