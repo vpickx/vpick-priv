@@ -209,12 +209,13 @@ const std::map<std::string, std::string> config_prop_map = {
     {"wifi.rssi",         "persist.wifi.rssi"},
     {"wifi.linkspeed",    "persist.wifi.linkspeed"},
     {"wifi.enable",       "persist.wifi.enable"},
+    {"wifi.dhcp_ip",      "persist.wifi.dhcp_ip"},
     {"wifi.dhcp_gateway", "persist.wifi.dhcp_gateway"},
-    {"wifi.dhcp_netmask", "persist.wifi.netmask"},
-    {"wifi.dhcp_dns1",    "persist.wifi.dns1"},
-    {"wifi.dhcp_dns2",    "persist.wifi.dns2"},
-    {"wifi.dhcp_server",  "persist.wifi.server"},
-    {"wifi.dhcp_lease",   "persist.wifi.lease"},
+    {"wifi.dhcp_netmask", "persist.wifi.dhcp_netmask"},
+    {"wifi.dhcp_dns1",    "persist.wifi.dhcp_dns1"},
+    {"wifi.dhcp_dns2",    "persist.wifi.dhcp_dns2"},
+    {"wifi.dhcp_server",  "persist.wifi.dhcp_server"},
+    {"wifi.dhcp_lease",   "persist.wifi.dhcp_lease"},
     {"wifi.frequency",    "persist.wifi.frequency"},
     {"bt.name",           "persist.bt.name"},
     {"bt.mac",            "persist.bt.mac"},
@@ -1791,7 +1792,7 @@ std::string generate_mac_addr() {
 }
 
 std::string generate_ip_addr() {
-    srand(time(NULL));
+    // srand(time(NULL));
     int network_choice = rand() % 100;
     int ip_part1 = 0, ip_part2 = 0, ip_part3 = 0, ip_part4 = 0;
 
@@ -1851,6 +1852,7 @@ int generate_link_speed() {
 
 
 int generate_frequency() {
+    srand(time(NULL));
     // 随机选择 2.4 GHz 或 5 GHz
     return (rand() % 2 == 0) ? 2400 : 5000;  // 2400 MHz (2.4 GHz), 5000 MHz (5 GHz)
 }
@@ -1861,6 +1863,7 @@ int generate_dhcp_lease() {
 }
 
 std::string generate_dns_address() {
+    // srand(time(NULL));
     // 定义常见的公共 DNS 和中国运营商 DNS
     std::vector<std::string> dns_pool = {
         "8.8.8.8", "8.8.4.4",         // Google DNS
@@ -1880,6 +1883,7 @@ std::string generate_dns_address() {
 
 // 根据传入的 IP 地址推算 DHCP 服务器地址
 std::string generate_dhcp_server(const std::string& ip_addr) {
+    srand(time(NULL));
     // 将 IP 地址按 '.' 分割成 4 个部分
     std::vector<int> octets;
     std::stringstream ss(ip_addr);
@@ -1915,7 +1919,6 @@ void generate_wifi_info() {
     std::string ip_addr = generate_ip_addr();
     int rssi = generate_rssi();
     int link_speed = generate_link_speed();
-    std::string dhcp_gateway = generate_ip_addr();
     std::string dhcp_netmask = "255.255.255.0";
     std::string dhcp_dns1 = generate_dns_address();
     std::string dhcp_dns2 = generate_dns_address();
@@ -1931,7 +1934,8 @@ void generate_wifi_info() {
     gif_config("wifi.linkspeed", std::to_string(link_speed));
     gif_config("wifi.enable", "1");
 
-    gif_config("wifi.dhcp_gateway", dhcp_gateway);
+    gif_config("wifi.dhcp_ip", ip_addr);
+    gif_config("wifi.dhcp_gateway", dhcp_server);
     gif_config("wifi.dhcp_netmask", dhcp_netmask);
     gif_config("wifi.dhcp_dns1", dhcp_dns1);
     gif_config("wifi.dhcp_dns2", dhcp_dns2);
@@ -2242,13 +2246,16 @@ int dump_main() {
     string version = execute_command("getprop ro.build.version.release");
     string build_id = execute_command("getprop ro.build.id");
     string imei = execute_command("getprop persist.sim.imei");
+    string serialno = execute_command("getprop ro.serialno");
     cout << "********************************************************************************" <<  endl;
     cout << "build_id    : " << build_id;
     cout << "version     : Android " << version;
     cout << "manufacturer: " << manufacturer;
     cout << "brand       : " << brand;
     cout << "model       : " << model;
+    cout << "serialno    : " << serialno;
     if (!imei.empty()) cout << "imei        : " << imei;
+    
     cout << "********************************************************************************" <<  endl;
     return 0;
 }
