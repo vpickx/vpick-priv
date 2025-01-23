@@ -188,8 +188,9 @@ void VpkdService::VpkdService::OnekeyNewDeviceThread::onBrandChanged() {
     std::string brand = execute_command("getprop ro.product.brand", true);
     if (brand != mBrand) {
         ALOGE("Brand changed: %s", brand.c_str());
-        mBrandChanged = true;
+        // mBrandChanged = true;
     }
+    mBrandChanged = true;
 };
 
 void VpkdService::VpkdService::OnekeyNewDeviceThread::onModelChanged() {
@@ -197,8 +198,9 @@ void VpkdService::VpkdService::OnekeyNewDeviceThread::onModelChanged() {
     std::string model = execute_command("getprop ro.product.model", true);
     if (model != mModel) {
         ALOGE("Model changed: %s", model.c_str());
-        mModelChanged = true;
+        //mModelChanged = true;
     }
+    mModelChanged = true;
 };
 
 void VpkdService::VpkdService::OnekeyNewDeviceThread::maybeUpdateDeviceInfo() {
