@@ -998,11 +998,26 @@ bool restore_system_files(const string &work_dir) {
         "/proc/self/attr/prev"
     };
 
+    string target_base = "/data/local/tmp/plugin";
+    
     for (const string &file : files_to_restore) {
-        string file_path = work_dir + file;
-        ifstream in_file(file_path);
+        // Map the file to the target directory
+        string relative_path = file.substr(1); // Remove leading "/"
+        string source_path = work_dir + "/" + relative_path; // Path in the work_dir
+        string target_path = target_base + "/" + relative_path; // Path in /data/misc/gif
+        
+        // Ensure target directory exists
+        string target_dir = target_path.substr(0, target_path.find_last_of('/'));
+        string mkdir_command = "mkdir -p " + target_dir;
+        if (system(mkdir_command.c_str()) != 0) {
+            cerr << "Failed to create directory: " << target_dir << endl;
+            return false;
+        }
+
+        // Read the file from the work_dir
+        ifstream in_file(source_path);
         if (!in_file.is_open()) {
-            cerr << "Failed to open file: " << file_path << endl;
+            cerr << "Failed to open source file: " << source_path << endl;
             return false;
         }
 
@@ -1010,19 +1025,21 @@ bool restore_system_files(const string &work_dir) {
         buffer << in_file.rdbuf();
         in_file.close();
 
-        string content = buffer.str();
-        ofstream out_file(file);
+        // Write the content to the target directory
+        ofstream out_file(target_path);
         if (out_file.is_open()) {
-            out_file << content;
+            out_file << buffer.str();
             out_file.close();
         } else {
-            cerr << "Failed to restore file: " << file << endl;
+            cerr << "Failed to restore file: " << target_path << endl;
             return false;
         }
+        chmod(target_path.c_str(), 0644);
     }
 
     return true;
 }
+
 
 bool restore_pm_list_features(const string &work_dir) {
     string features_path = work_dir + "/pm_list_features";
@@ -2277,6 +2294,7 @@ int restore_main() {
     restore_system_properties(work_dir);
     clear_conflict_properties();
     restore_pm_list_features(work_dir);
+    restore_system_files(work_dir);
     restore_gpu_info(work_dir);
 
     if (!keepcache) delete_directory(work_dir);
