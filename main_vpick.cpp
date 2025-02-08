@@ -1224,7 +1224,7 @@ GPUInfo generate_gpu_info(const std::string &brand, const std::string &model) {
         }},
         {"OnePlus", {
             {"PHB110", {"Qualcomm", "Adreno (TM) 740", "OpenGL ES 3.2 V@0676.32"}},
-            {"PJA110", {"Qualcomm", "Adreno (TM) 730", "OpenGL ES 3.2 V@0665.25"}},
+            {"PJA110", {"Qualcomm", "Adreno (TM) 740", "OpenGL ES 3.2 V@0665.25"}},
             {"PHK110", {"Qualcomm", "Adreno (TM) 740", "OpenGL ES 3.2 V@0676.32"}}
         }},
         {"POCO", {
