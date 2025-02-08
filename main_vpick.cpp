@@ -1556,56 +1556,54 @@ std::string generate_iccid(const std::string& mccmnc) {
     return iccid;
 }
 
-std::string generate_country_iso() {
-    // 国家及其对应的ISO 3166-1 alpha-2国家缩写
-    std::vector<std::pair<std::string, std::string>> country_iso = {
-        {"中国", "CN"},
-        // {"美国", "US"},
-        // {"英国", "GB"},
-        // {"法国", "FR"},
-        // {"德国", "DE"},
-        // {"日本", "JP"},
-        // {"印度", "IN"},
-        // {"澳大利亚", "AU"},
-        // {"巴西", "BR"},
-        // {"加拿大", "CA"},
-        // {"俄罗斯", "RU"},
-        // {"意大利", "IT"},
-        // {"西班牙", "ES"},
-        // {"墨西哥", "MX"},
-        // {"南非", "ZA"}
-        // 可以继续添加更多国家
-    };
-
-    // 随机选择一个国家缩写
-    size_t index = rand() % country_iso.size();
-    return country_iso[index].second;
-}
-
-// 随机生成运营商代号（MCC + MNC）
 std::string generate_operator_code() {
-    // 存储运营商代号（MCC + MNC）
-    std::vector<std::string> operator_codes = {
-        "46001", // 中国联通
-        "46002", // 中国移动
-        "46003", // 中国电信
-        // "310260", // 美国 T-Mobile
-        // "310260", // 美国 AT&T
-        // "40410", // 印度 Airtel
-        // "40411", // 印度 Vodafone
-        // "310150", // 美国 Verizon
-        // "20404", // 英国 Vodafone
-        // "26201", // 德国 T-Mobile
-        // "25001", // 法国 Orange
-        // "310030", // 加拿大 Bell
-        // "23430", // 英国 O2
-        // "310120", // 美国 Sprint
-        // "310240"  // 美国 U.S. Cellular
+    std::map<std::string, std::vector<std::string>> operator_map = {
+        {"CN", {"46000", "46001", "46002", "46003", "46007", "46011"}},
+        {"US", {"310260", "310150", "310120", "310240", "310030"}},
+        {"IN", {"40410", "40411", "40420", "40422"}},
+        {"GB", {"23410", "23430", "23415"}},
+        {"DE", {"26201", "26202", "26203"}},
+        {"FR", {"20801", "20810", "20820"}},
+        {"CA", {"302610", "302720", "302780"}},
+        {"JP", {"44010", "44020", "44030"}},
+        {"KR", {"45005", "45008", "45006"}},
+        {"AU", {"50501", "50502", "50503"}}
     };
 
-    // 随机选择一个运营商代号
-    size_t index = rand() % operator_codes.size();
-    return operator_codes[index];
+    std::string locale = execute_command("getprop ro.product.locale");
+    if (locale.empty()) {
+        locale = execute_command("getprop persist.sys.locale");
+    }
+    locale.erase(0, locale.find_first_not_of(" \t\n\r"));
+    locale.erase(locale.find_last_not_of(" \t\n\r") + 1);
+
+    if (dbg) cout << "locale=[" << locale << "]" << endl;
+
+    std::string country_code = "CN";
+    size_t pos = locale.find('-');
+    if (pos != std::string::npos) {
+        country_code = locale.substr(pos + 1);
+    }
+
+    // 去除 country_code 的首尾空格
+    country_code.erase(0, country_code.find_first_not_of(" \t\n\r"));
+    country_code.erase(country_code.find_last_not_of(" \t\n\r") + 1);
+
+    if (dbg) cout << "country_code=[" << country_code << "]" << endl;
+
+    auto it = operator_map.find(country_code);
+    if (it != operator_map.end() && !it->second.empty()) {
+        size_t index = rand() % it->second.size();
+        if (dbg) cout << "Selected Operator: " << it->second[index] << endl;
+        return it->second[index];
+    }
+
+    if (dbg) cout << "country_code [" << country_code << "] not found in operator_map! Using default CN operators." << endl;
+
+    std::vector<std::string> default_operators = {"46000", "46001", "46002", "46003"};
+    std::string selected = default_operators[rand() % default_operators.size()];
+    if (dbg) cout << "Default Operator: " << selected << endl;
+    return selected;
 }
 
 struct OperatorInfo {
@@ -1620,21 +1618,63 @@ struct OperatorInfo {
 OperatorInfo get_operator_info(const std::string& operator_code) {
     // 存储运营商代号与信息的映射
     std::unordered_map<std::string, OperatorInfo> operator_map = {
+        // 中国（CN）
+        {"46000", {"46000", "中国移动", "CMCC", "China Mobile", "CN"}},
         {"46001", {"46001", "中国联通", "CUCC", "China Unicom", "CN"}},
         {"46002", {"46002", "中国移动", "CMCC", "China Mobile", "CN"}},
         {"46003", {"46003", "中国电信", "CTCC", "China Telecom", "CN"}},
+        {"46007", {"46007", "中国移动", "CMCC", "China Mobile", "CN"}},
+        {"46011", {"46011", "中国电信", "CTCC", "China Telecom", "CN"}},
+
+        // 美国（US）
         {"310260", {"310260", "T-Mobile US", "TMO", "T-Mobile", "US"}},
         {"310150", {"310150", "Verizon", "VER", "Verizon Wireless", "US"}},
+        {"310120", {"310120", "Sprint", "SPR", "Sprint", "US"}},
+        {"310240", {"310240", "U.S. Cellular", "USC", "U.S. Cellular", "US"}},
+        {"310030", {"310030", "AT&T", "ATT", "AT&T", "US"}},
+
+        // 印度（IN）
         {"40410", {"40410", "Airtel India", "Airtel", "Airtel India", "IN"}},
         {"40411", {"40411", "Vodafone India", "Voda", "Vodafone India", "IN"}},
-        {"310120", {"310120", "Sprint", "SPR", "Sprint", "US"}},
-        {"20404", {"20404", "Vodafone UK", "VodaUK", "Vodafone UK", "GB"}},
+        {"40420", {"40420", "BSNL", "BSNL", "BSNL", "IN"}},
+        {"40422", {"40422", "Jio", "Jio", "Reliance Jio", "IN"}},
+
+        // 英国（GB）
+        {"23410", {"23410", "O2 UK", "O2UK", "O2 UK", "GB"}},
+        {"23430", {"23430", "EE UK", "EE", "EE UK", "GB"}},
+        {"23415", {"23415", "Vodafone UK", "VodaUK", "Vodafone UK", "GB"}},
+
+        // 德国（DE）
         {"26201", {"26201", "T-Mobile Germany", "TMO-DE", "T-Mobile Germany", "DE"}},
-        {"25001", {"25001", "Orange France", "Orange", "Orange France", "FR"}},
-        {"310030", {"310030", "Bell Canada", "Bell", "Bell Canada", "CA"}},
-        {"23430", {"23430", "O2 UK", "O2UK", "O2 UK", "GB"}},
-        {"310240", {"310240", "U.S. Cellular", "USC", "U.S. Cellular", "US"}}
+        {"26202", {"26202", "Vodafone Germany", "Voda-DE", "Vodafone Germany", "DE"}},
+        {"26203", {"26203", "O2 Germany", "O2-DE", "O2 Germany", "DE"}},
+
+        // 法国（FR）
+        {"20801", {"20801", "Orange France", "Orange", "Orange France", "FR"}},
+        {"20810", {"20810", "SFR", "SFR", "SFR France", "FR"}},
+        {"20820", {"20820", "Bouygues Telecom", "Bouygues", "Bouygues Telecom", "FR"}},
+
+        // 加拿大（CA）
+        {"302610", {"302610", "Bell Canada", "Bell", "Bell Canada", "CA"}},
+        {"302720", {"302720", "Rogers", "Rogers", "Rogers Wireless", "CA"}},
+        {"302780", {"302780", "Telus", "Telus", "Telus Mobility", "CA"}},
+
+        // 日本（JP）
+        {"44010", {"44010", "NTT Docomo", "Docomo", "NTT Docomo", "JP"}},
+        {"44020", {"44020", "SoftBank", "SoftBank", "SoftBank Mobile", "JP"}},
+        {"44030", {"44030", "KDDI", "KDDI", "KDDI au", "JP"}},
+
+        // 韩国（KR）
+        {"45005", {"45005", "SK Telecom", "SKT", "SK Telecom", "KR"}},
+        {"45008", {"45008", "KT Corporation", "KT", "KT Corporation", "KR"}},
+        {"45006", {"45006", "LG U+", "LGU", "LG U+", "KR"}},
+
+        // 澳大利亚（AU）
+        {"50501", {"50501", "Telstra", "Telstra", "Telstra", "AU"}},
+        {"50502", {"50502", "Optus", "Optus", "Optus", "AU"}},
+        {"50503", {"50503", "Vodafone Australia", "VodafoneAU", "Vodafone Australia", "AU"}}
     };
+
 
     // 查找运营商代号并返回相应的运营商信息
     auto it = operator_map.find(operator_code);
