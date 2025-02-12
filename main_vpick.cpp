@@ -2317,6 +2317,11 @@ int dump_main() {
     return 0;
 }
 
+
+void onekey_settings_sim() {
+    execute_command("gif onekey_settings set sim");
+}
+
 /////////////////////////////////////////////////////////////////////
 ///restore
 int restore_main() {
@@ -2341,7 +2346,8 @@ int restore_main() {
 
     generate_boot_id();
     generate_device_info();
-    generate_sim_info();
+    //onekey_settings();
+    onekey_settings_sim();
     generate_wifi_info();
     generate_bluetooth_info();
     generate_misc_info();
