@@ -16,6 +16,7 @@
 // const std::string VERSION="V1.0.14";
 //const std::string VERSION="V1.0.15";
 //const std::string VERSION="V1.0.16";
-const std::string VERSION="V1.0.17";
+// const std::string VERSION="V1.0.17";
+const std::string VERSION="V1.0.18";
 
 #endif
