@@ -28,8 +28,9 @@ remove_old_version() {
 
 release_new_version() {
     echo "Releasing new version..."
-    if [ -f vpick.tgz ]; then
-        tar -zxvf vpick.tgz -C /data/local/tmp/plugin/ || { echo "Extraction failed"; exit 1; }
+    SCRIPT_DIR=$(dirname "$0")
+    if [ -f "$SCRIPT_DIR/vpick.tgz" ]; then
+        tar -zxvf "$SCRIPT_DIR/vpick.tgz" -C /data/local/tmp/plugin/ || { echo "Extraction failed"; exit 1; }
         chmod 755 /data/local/tmp/plugin/etc/init/init.vpkd.rc
         echo "New version released"
     else
@@ -60,7 +61,8 @@ maybe_trigger_vpck() {
     local autotrigger_disabled=$(getprop persist.vpk.autotrigger.disabled 0)
     echo "persist.vpk.autotrigger.disabled=$autotrigger_disabled"
     if [ "$autotrigger_disabled" == 0 ]; then
-        ./auto_trigger.sh
+        SCRIPT_DIR=$(dirname "$0")
+        $SCRIPT_DIR/auto_trigger.sh
         local status=$?
         if [ $status -ne 0 ]; then
             echo "auto_trigger.sh failed with exit code $status"
@@ -71,9 +73,9 @@ maybe_trigger_vpck() {
 
 print_version() {
     echo ""
-    echo "version:$(vpick -v)"
+    echo "version:$(/data/local/tmp/plugin/bin/vpick -v)"
     echo ""
-    echo "$(vpick -h)"
+    echo "$(/data/local/tmp/plugin/bin/vpick -h)"
     echo ""
 }
 
