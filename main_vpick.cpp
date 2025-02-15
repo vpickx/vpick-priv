@@ -2345,10 +2345,9 @@ int restore_main() {
 
     restore_system_properties(work_dir);
     clear_conflict_properties();
-    restore_pm_list_features(work_dir);
+    // restore_pm_list_features(work_dir);
     restore_system_files(work_dir);
     restore_gpu_info(work_dir);
-
     if (!keepcache) delete_directory(work_dir);
 
     generate_boot_id();
