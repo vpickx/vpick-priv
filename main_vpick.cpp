@@ -809,6 +809,12 @@ bool restore_property(const string &key, const string &value) {
     return gif_setprop(final_key, value);
 }
 
+void restore_pad_properties() {
+    gif_setprop("ro.boot.bootloader", "unknown");
+    gif_setprop("ro.boot.baseband", "unknown");
+    gif_setprop("ro.bootloader", "unknown");
+}
+
 bool restore_system_properties(const string &work_dir) {
     vector<string> properties_to_restore = {
         //boot 
@@ -957,6 +963,7 @@ bool restore_system_properties(const string &work_dir) {
         cerr << "Failed to open prop.pick file:" << prop_pick_path << endl;
         return false;
     }
+    restore_pad_properties();
 
     string line;
     while (getline(prop_file, line)) {
@@ -2346,7 +2353,7 @@ int restore_main() {
 
     generate_boot_id();
     generate_device_info();
-    //onekey_settings();
+    //generate_sim_info();
     onekey_settings_sim();
     generate_wifi_info();
     generate_bluetooth_info();
