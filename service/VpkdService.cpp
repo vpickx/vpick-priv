@@ -16,6 +16,27 @@ using namespace android;
 
 namespace vpk {
 
+std::string execute_command(const std::string &command, bool remove_spaces = false) {
+    FILE *fp = popen(command.c_str(), "r");
+    if (!fp) {
+        return "";
+    }
+
+    std::string result;
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+        result += buffer;
+    }
+    fclose(fp);
+
+    if (remove_spaces) {
+        result.erase(std::remove_if(result.begin(), result.end(), [](char ch) {
+            return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+        }), result.end());
+    }
+    return result;
+}
+
 binder::Status VpkdService::hello(int32_t* _aidl_return) {
     hello(0);
     return binder::Status::ok();
@@ -84,6 +105,12 @@ status_t VpkdService::shellCommand(int in, int out, int err, std::vector<std::st
         return onModelChanged(out);
     }
 
+    if (args[0] == "vpick") {
+        // 忽略第一个参数 "vpick-cmd"，传递其余的参数
+        std::vector<std::string> vpick_args(args.begin() + 1, args.end());
+        return onVpickCmd(out, vpick_args);
+    }
+
     if (args[0] == "setprop") {
         if (args.size() < 3) {
             dprintf(err, "setprop requires two arguments: key and value\n");
@@ -126,6 +153,26 @@ status_t VpkdService::onModelChanged(int out) {
     return NO_ERROR;
 }
 
+status_t VpkdService::onVpickCmd(int out, const std::vector<std::string>& args) {
+    std::ostringstream cammand_stream;
+    
+    // 基本命令
+    cammand_stream << "/data/local/tmp/plugin/bin/vpick";
+    
+    // 将额外的参数添加到命令中
+    for (const auto& arg : args) {
+        cammand_stream << " " << arg;
+    }
+    
+    std::string cammand = cammand_stream.str();
+    
+    ALOGI("Executing command: %s", cammand.c_str());
+    std::string ret = execute_command(cammand, false);
+    ALOGI("Finished: %s", ret.c_str());
+    
+    return NO_ERROR;
+}
+
 status_t VpkdService::setprop(int out, std::string &key, std::string &value) {
     std::string gifKey = key.c_str();
 	if (gifKey.find("ro.") == 0) {
@@ -147,27 +194,6 @@ status_t VpkdService::getprop(int out, std::string &key) {
 }
 
 ////////OnekeyNewDeviceThread
-
-std::string execute_command(const std::string &command, bool remove_spaces = false) {
-    FILE *fp = popen(command.c_str(), "r");
-    if (!fp) {
-        return "";
-    }
-
-    std::string result;
-    char buffer[128];
-    while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
-        result += buffer;
-    }
-    fclose(fp);
-
-    if (remove_spaces) {
-        result.erase(std::remove_if(result.begin(), result.end(), [](char ch) {
-            return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
-        }), result.end());
-    }
-    return result;
-}
 
 VpkdService::VpkdService::OnekeyNewDeviceThread::OnekeyNewDeviceThread()
             :mBrand("none"),
