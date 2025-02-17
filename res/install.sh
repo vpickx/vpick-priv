@@ -23,6 +23,7 @@ remove_old_version() {
     rm -f /data/local/tmp/plugin/bin/vpkd
     rm -f /data/local/tmp/plugin/bin/vpick
     rm -f /data/local/tmp/plugin/etc/init/init.vpkd.rc
+    rm -fr /data/local/tmp/plugin/meta/vpk
     echo "Old version removed"
 }
 
