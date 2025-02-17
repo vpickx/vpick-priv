@@ -152,6 +152,9 @@ string execute_command(const string &command) {
     return result;
 }
 
+std::string gif_getprop(const std::string& key) {
+    return remove_spaces(execute_command("getprop " + key));
+}
 
 bool gif_setprop(const std::string& key, const std::string& value) {
     std::string setprop_cmd = "gif setprop";
@@ -166,6 +169,15 @@ bool gif_setprop(const std::string& key, const std::string& value) {
         return false;
     }
     return true;
+}
+
+void copy_system_property(const std::string &src_prop, const std::string &dst_prop) {
+    std::string value = gif_getprop(src_prop);
+    if (value.empty()) {
+        if (dbg) std::cerr << "Failed to read property: " << src_prop << std::endl;
+        return;
+    }
+    gif_setprop(dst_prop, value);
 }
 
 // 全局常量映射表
@@ -836,6 +848,7 @@ bool restore_system_properties(const string &work_dir) {
         "ro.build.product",
         //"ro.build.shutdown_timeout",
         "ro.build.tags",
+        "ro.build.type",
         "ro.build.user",
         "ro.build.version.all_codenames",
         "ro.build.version.base_os",
@@ -2057,7 +2070,13 @@ std::string generate_bt_mac(const std::string& bluetooth_name) {
     }
 
     unsigned char mac[6];
-    sscanf(oui.c_str(), "%2x:%2x:%2x", &mac[0], &mac[1], &mac[2]);
+    //sscanf(oui.c_str(), "%2x:%2x:%2x", &mac[0], &mac[1], &mac[2]);
+    unsigned int temp_mac[3];
+    sscanf(oui.c_str(), "%2x:%2x:%2x", &temp_mac[0], &temp_mac[1], &temp_mac[2]);
+
+    mac[0] = static_cast<unsigned char>(temp_mac[0]);
+    mac[1] = static_cast<unsigned char>(temp_mac[1]);
+    mac[2] = static_cast<unsigned char>(temp_mac[2]);
 
     for (int i = 3; i < 6; ++i) {
         mac[i] = rand() % 256;
@@ -2324,9 +2343,62 @@ int dump_main() {
     return 0;
 }
 
+std::string get_network_type(std::string network_id) {
+    static const std::unordered_map<std::string, std::string> network_map = {
+        // 2G
+        {"1", "GPRS"},
+        {"2", "EDGE"},
+        // 3G
+        {"3", "UMTS"},
+        {"8", "HSDPA"},
+        {"9", "HSUPA"},
+        {"10", "HSPA"},
+        {"15", "HSPA+"},
+        // 4G
+        {"13", "LTE"},
+        {"14", "LTE+ (Advanced)"},
+        {"19", "LTE CA"},  // LTE 载波聚合
+        // 5G
+        {"20", "NR"},
+        {"41", "NR SA"},  // 5G 独立组网 (Standalone)
+        {"42", "NR NSA"}  // 5G 非独立组网 (Non-Standalone)
+    };
+
+    auto it = network_map.find(network_id);
+    return (it != network_map.end()) ? it->second : "LTE";
+}
+
+void set_gsm_prop() {
+    std::string network_id = gif_getprop("persist.sim.datatype");
+    const std::string data_type_str = get_network_type(network_id);
+    gif_setprop("gsm.network.type", data_type_str);
+    copy_system_property("persist.sim.sim_code",        "gsm.sim.operator.iso-country");
+    copy_system_property("persist.sim.operator_code",   "gsm.sim.operator.numeric");
+    copy_system_property("persist.sim.operator_name",   "gsm.sim.operator.orig.alpha");
+
+    copy_system_property("persist.sim.country_iso",     "gsm.operator.iso-country");
+    copy_system_property("persist.sim.operator_code",   "gsm.operator.numeric");
+    copy_system_property("persist.sim.operator_name",   "gsm.operator.alpha");
+}
 
 void onekey_settings_sim() {
+    srand(time(NULL));
     execute_command("gif onekey_settings set sim");
+    set_gsm_prop();
+
+    //signalStrength
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(-110, -30);
+
+    int signalStrength = dist(gen);
+    gif_setprop("persist.sim.signalStrength", std::to_string(signalStrength));
+    //iso
+    std::string carrier = gif_getprop("ro.vc.build.carrier");
+    if (carrier == "SE") {
+        gif_setprop("persist.sim.country_iso", "US");
+        gif_setprop("persist.sim.sim_iso", "US");
+    }
 }
 
 /////////////////////////////////////////////////////////////////////
